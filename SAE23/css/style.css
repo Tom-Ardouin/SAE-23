@@ -1,0 +1,11 @@
+/* css/style.css */
+body { font-family: Arial; margin: 2em; background-color: #f5f5f5; }
+h1 { color: #2a4d69; }
+nav { margin-bottom: 20px; }
+nav a { margin-right: 10px; color: #2a4d69; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+table { border-collapse: collapse; width: 80%; margin: 20px 0; }
+td, th { border: 1px solid #ccc; padding: 8px; }
+th { background-color: #eee; }
+input[type="submit"] { background-color: #2a4d69; color: white; padding: 5px 10px; border: none; cursor: pointer; }
+footer { margin-top: 3em; color: #555; font-size: 0.9em; }
