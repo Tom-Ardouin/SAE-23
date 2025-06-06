@@ -1,40 +1,33 @@
 <?php
-// Connexion MySQL
-$host = 'localhost';
-$user = 'sae23PA';
-$password = 'passroot';
-$dbname = 'sae23';
-$conn = new mysqli($host, $user, $password, $dbname);
-if ($conn->connect_error) {
-    die("Erreur de connexion: " . $conn->connect_error);
-}
+include 'includes/db.php'; // Connexion MySQL
 
-// Récupérer un message JSON via MQTT
+// 1. Récupérer un message JSON depuis le broker MQTT
 $json = shell_exec("mosquitto_sub -h mqtt.iut-blagnac.fr -t AM107/by-room/E104/data -C 1");
+$data = json_decode($json, true);
 
-// Vérification du contenu
-if (empty($json)) {
-    die("Aucun message MQTT reçu.");
-}
-
-$data = json_decode($json, true); // true = tableau associatif
+// 2. Vérification du format
 if (!$data || !isset($data[0], $data[1])) {
-    print_r($data);
-    die("Format JSON incorrect ou incomplet.");
+    die(" Format JSON incorrect ou message vide.");
 }
 
-// Extraction des données
 $mesures = $data[0];
 $infos = $data[1];
 
-if (!isset($infos["room"])) {
-    die("Champ 'room' manquant dans le JSON.");
-}
-
-$nomSalle = $infos["room"];
+// 3. Données de référence
 $date = date('Y-m-d');
 $heure = date('H:i:s');
 
+$batiment = $conn->real_escape_string($infos["Building"]);
+$etage = (int) $infos["floor"];
+$salle = $conn->real_escape_string($infos["room"]);
+
+// 4. Insérer le bâtiment s'il n'existe pas
+$conn->query("INSERT IGNORE INTO Batiment (NOM_BAT) VALUES ('$batiment')");
+
+// 5. Insérer la salle
+$conn->query("INSERT IGNORE INTO Salle (NOM_SA, ETAGE, BATIMENT) VALUES ('$salle', $etage, '$batiment')");
+
+// 6. Capteurs à gérer
 $capteurs = [
     "temperature" => "°C",
     "humidity" => "%",
@@ -47,24 +40,20 @@ $capteurs = [
     "pressure" => "hPa"
 ];
 
-// Insérer la salle si elle n’existe pas
-$conn->query("INSERT IGNORE INTO Salle (NOM_SA) VALUES ('$nomSalle')");
+// 7. Boucle : un capteur = un enregistrement
+foreach ($capteurs as $type => $unite) {
+    if (!isset($mesures[$type])) continue;
+    $valeur = $mesures[$type];
+    $nomCapteur = $type . "_" . $salle;
 
-// Pour chaque capteur, insérer les infos
-foreach ($capteurs as $nom => $unite) {
-    if (!isset($mesures[$nom])) continue;
-    $valeur = $mesures[$nom];
-    $nomCapteur = $nom . "_" . $nomSalle;
+    // Ajouter le capteur
+    $conn->query("INSERT IGNORE INTO Capteur (NOM_CAPT, TYPE_CAPT, UNITE, SALLE)
+                  VALUES ('$nomCapteur', '$type', '$unite', '$salle')");
 
-    // Capteur
-    $conn->query("INSERT IGNORE INTO Capteur (NOM_CAPT, TYPE_CAPT, UNITE, SALLE) 
-                  VALUES ('$nomCapteur', '$nom', '$unite', '$nomSalle')");
-
-    // Mesure
-    $conn->query("INSERT INTO Mesure (Date_MESU, HOR, VAL, CAPT) 
+    // Ajouter la mesure
+    $conn->query("INSERT INTO Mesure (Date_MESU, HOR, VAL, CAPT)
                   VALUES ('$date', '$heure', $valeur, '$nomCapteur')");
 }
 
-echo " Données insérées avec succès.";
-$conn->close();
+echo " Données insérées avec succès.\n";
 ?>
